@@ -211,7 +211,7 @@ def analyse_run(arg):
     W = weights(p, c); b = beta_of(p, M_MU)
     norms = dict(plane=np.ones(len(c), bool), tel=z[name+'/top']&z[name+'/bot'])
     res = dict(name=name, group=kind, P=run['P'], variant=run['variant'], rayleigh=run['rayleigh'], F=F, n=int(len(c)), nseed=nseed)
-    for origin in (run['origins'] if kind != 'c4' else ('tile',)):
+    for origin in ([o for o in run['origins'] if o != 'window'] if kind != 'c4' else ('tile',)):   # window light: no ring rates
         for tag in ('b1', 'br'):
             bb = np.ones(len(c)) if tag == 'b1' else b
             wk = 'b1' if tag == 'b1' else 'guan'; w = W[wk]
@@ -471,10 +471,10 @@ def main():
     tables(R, run_of, trig, out)
     if any('pads_mean_r80' in x[k]['tel'] for x in R.values() for k in x if k.startswith(('gas_', 'tile_'))):
         board_table(R, out, meta['args'].get('nphot'))
-    if meta['args'].get('groups') is None:
+    if meta['args'].get('groups') is None and meta['args'].get('only') is None:
         figures(R, run_of, out)
     else:
-        print('figures skipped: they need every run group (cosmic_rates.py without --groups)')
+        print('figures skipped: they need every run (cosmic_rates.py without --groups and --only)')
     print('cores used: %d' % args.nproc)
 
 

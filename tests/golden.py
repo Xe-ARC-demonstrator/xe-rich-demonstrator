@@ -3,7 +3,8 @@
     python tests/golden.py check [--jobs N]     compare with the reference of this CPU type (exit 1 on any change)
     python tests/golden.py regen [--jobs N]     rewrite the reference of this CPU type
 
-A regeneration is allowed only with a change of the input card (docs/design_options.md): a code change must leave every
+A regeneration is allowed only with a change of the input card (docs/design_options.md), or with a new driver option,
+which changes only the recorded arguments (provenance records and meta digest): a code change must leave every other
 golden output unchanged. Runs: cosmic_rates.py --groups c1 c5 c4 and cosmic_rates_plots.py at the defaults and with
 --preset published (the model of the published tables), configuration 1 alone with more muons per task than one
 work_mirror chunk holds (model 'chunked'), plus the stdout of raytrace.py, cosmic_acc.py and toy_prox.py.

@@ -72,6 +72,9 @@ AEROGEL_SURFACE_A = 1.0      # aerogel surface factor A in T = A exp(-C t/lambda
 WINDOW_N = 1.55              # refractive index: S13361 datasheet epoxy value, to be confirmed for the board's arrays
 WINDOW_T = 0.1               # thickness [mm]: S13361 datasheet value (0.05-0.15 mm band), to be confirmed for the board's arrays
 MIP_DIRECT_PE = 1.0          # fired cells from the muon crossing the silicon (one microcell at normal incidence)
+# fused silica (pressure-window option): Sellmeier coefficients B_i and resonance wavelengths C_i [um], Malitson, JOSA 55 (1965) 1205
+FUSED_SILICA_B = (0.6961663, 0.4079426, 0.8974794)
+FUSED_SILICA_C = (0.0684043, 0.1162414, 9.896161)
 
 # Fixed values used in place of computed ones
 THETA_AERO_GAS = 0.249       # aerogel Cherenkov angle taken as the ring angle in the gas [rad]

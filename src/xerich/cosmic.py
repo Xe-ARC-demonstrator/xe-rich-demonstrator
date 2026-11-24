@@ -4,7 +4,7 @@
   slope_term=True keeps the slope-term footprint of the legacy beta = 1 toys (sim.footprint_fraction), the default traces
   straight lines.
 - emit_batch, trace_batch: Cherenkov photons of many muons at their own velocity in a Phase1Layout, traced with
-  tracer.trace and summed per muon and origin (gas, tile).
+  tracer.trace and summed per muon and origin (gas, tile, window: the layout's window slab, if any).
 No photodetection efficiency other than the QE weighting (ARC SiPM QE by default, S13361 PDE as an option), mirror
 reflectivity 1 unless layout.Mirror.reflectivity sets one, no absorption. The tile side faces are black: tracer.trace
 ends every photon that reaches a slab side face (reason 'tile sides'), also on its way back from the mirror (a black
@@ -18,7 +18,7 @@ from .cherenkov import qe_arc, qe_band
 from .constants import ALPHA, HBARC_EV_CM, HC, PAD_KMAX
 from .sim import footprint_fraction, footprint_fraction_tracks, track_segments
 
-ORIGINS = ('gas', 'tile')
+ORIGINS = ('gas', 'tile', 'window')
 N_ARC = 36                   # azimuth bins of the arc coverage
 MAX_SEGMENTS = 3             # track segments per origin handled by emit_batch
 BOARD_KEYS = ('det_qe_plane', 'det_qe_ring', 'pads', 'pads_all')   # extra trace_batch sums of the board sensor model
@@ -65,8 +65,9 @@ def emit_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, resp
     Raises ValueError for a track with more than MAX_SEGMENTS segments in one origin.
     """
     E_lo, E_hi = qe_band() if band is None else band
-    index = {'gas': layout.gas.n, 'tile': layout.tile_index.n if layout.tile is not None else None}
-    region = {'gas': -1, 'tile': 0}
+    index = {'gas': layout.gas.n, 'tile': layout.tile_index.n if layout.tile is not None else None,
+             'window': layout.window.medium.n if layout.window is not None else None}
+    region = {'gas': -1, 'tile': 0, 'window': int(layout.tile is not None)}   # slab order of Phase1Layout.scene
     segs = [track_segments(layout, p, u) for p, u in zip(P0, U)]
     out = []
     for oi, org in enumerate(ORIGINS):
@@ -233,7 +234,7 @@ def trace_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, max
 
 
 def fractions(res, origin):
-    """(fm, fs, fd) per muon for origin ('gas' or 'tile') from trace_batch output; 0 where nothing was emitted."""
+    """(fm, fs, fd) per muon for origin ('gas', 'tile' or 'window') from trace_batch output; 0 where nothing was emitted."""
     o = ORIGINS.index(origin)
     e = res['emit_ft'][:, o]; d = res['det_ft'][:, o]; out = res['out_ft'][:, o]; mi = res['mirror_ft'][:, o]
     with np.errstate(invalid='ignore', divide='ignore'):

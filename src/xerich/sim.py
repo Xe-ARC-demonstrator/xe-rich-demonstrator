@@ -339,24 +339,27 @@ def _box_interval(p0, u, lo, hi, s_end):
 def track_segments(layout, p0, u):
     """Path-length intervals of the track p0 + s u (s >= 0) in the gas, the tile and the window, up to the mirror sphere.
 
-    Returns {'gas': [(s0, s1), ...], 'tile': [(s0, s1)] or [], 'window': [(s0, s1)] or []}.
+    Returns {'gas': [(s0, s1), ...], 'tile': [(s0, s1)] or [], 'window': [(s0, s1)] or [], 'outer': [(s0, s1)] or []};
+    'outer' is the gap between a pressure window and the sensor (Window.gap > 0), which is not gas and emits no photons.
     """
     p0 = np.asarray(p0, float); u = np.asarray(u, float)
     m = p0-np.array([0, 0, layout.mirror.R]); b = m@u; c = m@m-layout.mirror.R**2
     s_end = -b+np.sqrt(b*b-c)
-    tile, window = [], []
+    tile, window, outer = [], [], []
     if layout.tile is not None:
         h = layout.tile.half
         tile = _box_interval(p0, u, (-h, -h, layout.z_tile_bottom), (h, h, layout.z_tile_top), s_end)
     if layout.window is not None:
-        h = layout.sensor.half
-        window = _box_interval(p0, u, (-h, -h, layout.z_window_bottom), (h, h, layout.z_sensor), s_end)
+        h = layout.sensor.half if layout.window.half is None else layout.window.half
+        window = _box_interval(p0, u, (-h, -h, layout.z_window_bottom), (h, h, layout.z_window_top), s_end)
+        if layout.window.gap > 0:
+            outer = _box_interval(p0, u, (-h, -h, layout.z_window_top), (h, h, layout.z_sensor), s_end)
     gas, s = [], 0.0
-    for a, b_ in sorted(tile+window)+[(s_end, s_end)]:
+    for a, b_ in sorted(tile+window+outer)+[(s_end, s_end)]:
         if a > s:
             gas.append((s, a))
         s = b_
-    return {'gas': gas, 'tile': tile, 'window': window}
+    return {'gas': gas, 'tile': tile, 'window': window, 'outer': outer}
 
 
 def emit_photons(rng, p0, u, segments, n, spectrum):

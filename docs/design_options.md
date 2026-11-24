@@ -111,6 +111,7 @@ Diameter, f, coating and price are *[datasheet]* or vendor quotes; the comments 
 ### 2.5 Large or custom mirrors
 - **Custom spherical mirror**, ~200–260 mm diameter, R ≈ 400 mm (sag ≈ 13 mm), Al + SiO₂ or Al + MgF₂; lead time weeks to months; λ/2 or even λ is sufficient for mrad-level imaging. Possible suppliers: **Avantier** (5–500 mm, λ/4 standard, UV-enhanced Al), **asphericon** (Jena; up to 420 mm, coatings from 190 nm), the suppliers or spare segments of the LHCb RICH and ARC groups.
 - **Mosaic** of 2–4 × 3" mirrors around a common centre of curvature: each segment works near its own axis; needs alignment.
+- Not pursued for the pre-demonstrator: the stock 3" f = 203 mm mirror is kept (§2.4).
 
 ---
 
@@ -165,6 +166,8 @@ Diameter, f, coating and price are *[datasheet]* or vendor quotes; the comments 
 | 4, gap 70 mm (aerogel ring) | 34.5 ± 1.5 | 827 | 9.16 | 7.98 | 7.18 | 0.878 | 0.268 | 726 ± 36 | 222 ± 11 | | | |
 
 **Pixel pitch.** Pixel term per photon, (pitch/√12)/f at f = 203 mm: 3.2 mm (the board) 4.5 mrad, dominant; 0.8 mm (as in the ARC simulation) 1.1 mrad; 0.5 mm 0.7 mrad.
+
+**Pressure window (planned).** The SiPM board sits in a dry-air box outside the Xe and looks through a fused-silica window. Model (`cosmic_rates.py --pwindow-t T`, README): window 80 × 80 mm, thickness T, uncoated, index from the Sellmeier fit of Malitson (Sources); 1 mm of Xe between tile and window, 1 mm of dry air between window and SiPM; the SiPM refocused to f + T (1 − 1/n); no board reflection. The muon's own Cherenkov light in the window is a separate run. Implemented for configurations 1 and 5; the input card and the tables above are without the window.
 
 ---
 
@@ -271,6 +274,7 @@ Aerogel-angle measurement (configurations 2–4):
 - Measured mirror reflectivity, PDE at the operating point and aerogel transmission, to replace the assumed inputs (§4); crosstalk and dark counts are not modelled.
 - Cosmic rates: altitude and geomagnetic cutoff (§5), the trigger-counter geometry, the momentum handle and a data-level estimator of the aerogel angle for configurations 2–4, the tile side faces (§7).
 - Comparison with the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.
+- Pressure window (§4): thickness, anti-reflection coating, the muon's light in the window, the window in configurations 1–4 (configuration 4 has no window model yet), the board reflection with the window.
 
 ## Sources
 - Xe dispersion:
@@ -285,6 +289,7 @@ Aerogel-angle measurement (configurations 2–4):
   - BESS muon spectra at Tsukuba and Lynn Lake: [Motoki et al., Astropart. Phys. 19, 113 (2003), arXiv:astro-ph/0205344](https://arxiv.org/abs/astro-ph/0205344)
   - Muon range: Groom, Mokhov and Striganov, At. Data Nucl. Data Tables 78, 183 (2001); [PDG atomic and nuclear properties](https://pdg.lbl.gov/2024/AtomicNuclearProperties/)
 - Xe density: [NIST Chemistry WebBook, fluid properties of xenon](https://webbook.nist.gov/cgi/fluid.cgi?ID=C7440633&Action=Page)
+- Fused silica: [Malitson, J. Opt. Soc. Am. 55, 1205 (1965)](https://doi.org/10.1364/JOSA.55.001205), Sellmeier fit over 0.21–3.71 µm
 - Mirrors:
   - [Edmund #43-584](https://www.edmundoptics.com/p/3quot-dia-8quot-fl-uv-enhanced-alum-spherical-mirror/5147/)
   - [Edmund #43-543](https://www.edmundoptics.eu/p/2quot-dia-2quot-fl-uv-enhanced-alum-spherical-mirror/5106/) and [#43-553](https://www.edmundoptics.eu/p/3quot-dia-3quot-fl-uv-enhanced-alum-spherical-mirror/5116/) (short focal length)

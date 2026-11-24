@@ -6,7 +6,7 @@ from typing import Callable
 import numpy as np
 
 from .constants import (AEROGEL_LAMBDA_REF, AEROGEL_N_AIR, AEROGEL_POLE_NM, AEROGEL_POROSITY, AEROGEL_POROSITY_AIRREF,
-                        AEROGEL_SURFACE_A, HC, P0, R_GAS, RAYLEIGH_C_AEROGEL, T0, T_ROOM)
+                        AEROGEL_SURFACE_A, FUSED_SILICA_B, FUSED_SILICA_C, HC, P0, R_GAS, RAYLEIGH_C_AEROGEL, T0, T_ROOM)
 
 # Xe second virial coefficient B(T) = B_XE_293 + B_XE_SLOPE (T - B_XE_TREF), approximate (Dymond & Smith)
 B_XE_293 = -130.0            # [cm^3/mol]
@@ -140,6 +140,12 @@ def n_air(lam_nm):
     return np.full(np.shape(lam_nm), N_AIR)
 
 
+def n_fused_silica(lam_nm):
+    """Fused-silica index (Sellmeier fit of Malitson, FUSED_SILICA_B and _C; fitted over 0.21-3.71 um)."""
+    l2 = (np.asarray(lam_nm, float)*1e-3)**2
+    return np.sqrt(1+sum(b*l2/(l2-c*c) for b, c in zip(FUSED_SILICA_B, FUSED_SILICA_C)))
+
+
 class ConstantIndex:
     """Wavelength-independent refractive index, callable like the other index functions."""
 
@@ -173,6 +179,11 @@ def c4f10():
 def air():
     """Air with the ARC simulation index (n_air)."""
     return Medium('air', n_air)
+
+
+def fused_silica():
+    """Fused silica (n_fused_silica)."""
+    return Medium('fused silica', n_fused_silica)
 
 
 def aerogel_constant(n=AEROGEL_N_AIR):

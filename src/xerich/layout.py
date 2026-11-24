@@ -6,7 +6,7 @@ import numpy as np
 
 from .constants import (AEROGEL_HALF, AEROGEL_T, BOARD_EDGE, BOARD_NPAD, BOARD_PACKAGE, BOARD_PAD, MIRROR_CLEAR_FRAC,
                         MIRROR_REFL_NOMINAL, MIRROR_REFL_NOMINAL_NM, PIXEL_PITCH, T_ROOM, WINDOW_N, WINDOW_T)
-from .media import XE_INDEX_DEFAULT, ConstantIndex, Medium, Rayleigh, aerogel_constant, n_xe
+from .media import XE_INDEX_DEFAULT, ConstantIndex, Medium, Rayleigh, aerogel_constant, air, n_xe
 from .tracer import Scene, SensorPlane, Slab, SphereMirror
 
 
@@ -132,13 +132,23 @@ class Aerogel:
 
 @dataclass(frozen=True)
 class Window:
-    """SiPM protective window covering the sensor, directly below the sensor plane: refractive index, thickness."""
+    """Window below the sensor plane: refractive index n (or the medium glass), thickness. gap = 0: the SiPM protective
+    window, directly below the sensor plane and of its size. gap > 0: a pressure window of half side half (None: the
+    sensor plane's), its top face gap below the sensor plane, the gap filled with the medium outer (None: air)."""
     n: float = WINDOW_N
     thickness: float = WINDOW_T
+    gap: float = 0.0
+    half: float | None = None
+    glass: Medium | None = None
+    outer: Medium | None = None
 
     @property
     def medium(self):
-        return Medium('window n = %g' % self.n, ConstantIndex(self.n))
+        return self.glass if self.glass is not None else Medium('window n = %g' % self.n, ConstantIndex(self.n))
+
+    @property
+    def outer_medium(self):
+        return self.outer if self.outer is not None else air()
 
 
 @dataclass(frozen=True)
@@ -162,8 +172,9 @@ class Phase1Layout:
     z_sensor, perpendicular to and centred on the axis; z_sensor_ overrides its default, the
     paraxial focal plane z = f. The whole volume is filled with the gas; tile_medium defaults to
     a constant index tile.n. tile_scatter (media.Rayleigh or None) adds Rayleigh scattering in the
-    tile. window (Window or None) puts a window of the sensor size in the gap, directly below the
-    sensor plane, whose top face absorbs like the sensor.
+    tile. window (Window or None) puts a window in the gap: with window.gap = 0 of the sensor size,
+    directly below the sensor plane, whose top face absorbs like the sensor; with window.gap > 0 a
+    pressure window with a slab of window.outer_medium between it and the sensor plane (no gas there).
     """
     mirror: Mirror
     sensor: Sensor
@@ -188,8 +199,12 @@ class Phase1Layout:
         return self.z_tile_top-self.tile.thickness
 
     @property
+    def z_window_top(self):
+        return self.z_sensor-self.window.gap
+
+    @property
     def z_window_bottom(self):
-        return self.z_sensor-self.window.thickness
+        return self.z_window_top-self.window.thickness
 
     @property
     def tile_index(self):
@@ -197,7 +212,8 @@ class Phase1Layout:
         return self.tile_medium if self.tile_medium is not None else aerogel_constant(self.tile.n)
 
     def scene(self):
-        """tracer.Scene of the layout: gas, tile slab (then window slab, if any), mirror cap and sensor plane."""
+        """tracer.Scene of the layout: gas, tile slab (then window slab and, with window.gap > 0, the outer slab above it, if
+        any), mirror cap and sensor plane."""
         if self.gap <= 0:
             raise ValueError('the gap between tile and sensor must be positive')
         slabs = ()
@@ -205,10 +221,12 @@ class Phase1Layout:
             h = self.tile.half
             slabs = (Slab((-h, -h, self.z_tile_bottom), (h, h, self.z_tile_top), self.tile_index, self.tile_scatter),)
         if self.window is not None:
-            if self.tile is not None and self.window.thickness >= self.gap:
-                raise ValueError('the window must be thinner than the gap')
-            h = self.sensor.plane_half
-            slabs += (Slab((-h, -h, self.z_window_bottom), (h, h, self.z_sensor), self.window.medium),)
+            if self.tile is not None and self.window.gap+self.window.thickness >= self.gap:
+                raise ValueError('the window (and its gap to the sensor) must be thinner than the gap')
+            h = self.sensor.plane_half if self.window.half is None else self.window.half
+            slabs += (Slab((-h, -h, self.z_window_bottom), (h, h, self.z_window_top), self.window.medium),)
+            if self.window.gap > 0:
+                slabs += (Slab((-h, -h, self.z_window_top), (h, h, self.z_sensor), self.window.outer_medium),)
         mirror = SphereMirror((0.0, 0.0, self.mirror.R), self.mirror.R, (0.0, 0.0, 1.0), self.mirror.clear_radius,
                               mirror_reflectivity(self.mirror.reflectivity))
         return Scene(self.gas, slabs, mirror, SensorPlane(self.z_sensor, self.sensor.plane_half))

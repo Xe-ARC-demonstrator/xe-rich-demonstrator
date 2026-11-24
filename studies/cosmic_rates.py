@@ -17,6 +17,7 @@ for _v in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS'):
 
 import json  # noqa: E402
 import multiprocessing as mp  # noqa: E402
+import re  # noqa: E402
 import time  # noqa: E402
 from concurrent.futures import ProcessPoolExecutor, as_completed  # noqa: E402
 import zlib  # noqa: E402
@@ -28,8 +29,8 @@ from xerich.analysis import pad_hits  # noqa: E402
 from xerich.cherenkov import response  # noqa: E402
 from xerich.cherenkov import beta as beta_of  # noqa: E402
 from xerich.constants import AEROGEL_N_AIR, M_MU, MIRROR_D, MIRROR_R, MIRROR_SHORT_F, MUON_THMAX, P_REF  # noqa: E402
-from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor  # noqa: E402
-from xerich.media import N_AIR, Rayleigh, aerogel_index, aerogel_index_air, aerogel_medium, air, n_xe, xenon  # noqa: E402
+from xerich.layout import Aerogel, Mirror, Phase1Layout, Sensor, Window  # noqa: E402
+from xerich.media import N_AIR, Rayleigh, aerogel_index, aerogel_index_air, aerogel_medium, air, fused_silica, n_xe, xenon  # noqa: E402
 
 PRESSURES = (1.0, 1.5, 2.0, 2.5, 3.0)            # absolute [bar]
 VARIANTS = ('plain', 'pore-vac', 'pore-air')     # tile n = 1.03; + porosity_vac (n_gas - 1) (--porosity-vac); + 0.935 (n_gas - n_air)
@@ -40,10 +41,15 @@ TOP_HALF = 25.0              # top counter: 5 x 5 cm at the SiPM plane (configur
 BOT_HALF = {'mirror': 40.0, 'prox': 25.0}        # bottom counter: 8 x 8 cm at the mirror vertex plane; 5 x 5 cm at the SiPM plane
 GAPS = (30.0, 50.0, 70.0)
 NPHOT = cli.NPHOT_DEFAULT     # default sampled tile photons per muon (--nphot)
+NPHOT_WINDOW = 720           # sampled photons per muon in the pressure window (--nphot-window)
 REFL_STREAM = 1              # last seed word of the board-reflection generator of a task
 CHUNK = 2000                 # muons traced together in work_mirror at most (the random streams depend on the chunk)
 CHUNK_PHOTONS = 3000000      # photons traced together at most: fewer muons per chunk at large --nphot (memory)
 LAYOUTS_61 = [(h, D) for h in (25.6, 40.0, 51.2, 64.0) for D in (76.2, 152.4, 200.0)]
+PWINDOW_GAP = 1.0            # pressure window (--pwindow-t): gap tile -> window and window -> SiPM (dry air) [mm]
+PWINDOW_HALF = 40.0          # its half side [mm]
+PWINDOW_LAM = 400.0          # wavelength of its index in the refocusing shift t (1 - 1/n) of the SiPM [nm]
+PWINDOW_GROUPS = ('c1', 'c5')   # run groups with a window model (the f = 203 mm mirror; tile, if any, below the window)
 _G = {}
 
 
@@ -62,8 +68,8 @@ def tile_n(P, variant):
             'pore-air': float(aerogel_index_air(ng))}[variant]
 
 
-def runs(scale):
-    """List of run definitions (dicts)."""
+def runs(scale, window=False):
+    """List of run definitions (dicts); window: add the configuration-5 runs of the muon's light in the pressure window (origin 'window', the muons of the gas-ring runs)."""
     R = []
 
     def add(**kw):
@@ -79,6 +85,9 @@ def runs(scale):
             rayleigh=True, origins=('gas',), zmax=20.0, n_mu=100000, key='c15')
         add(name='c5_%s_plain_geo' % gas_label(P), group='c5', mirror=(MIRROR_R, MIRROR_D), sensor=SIPM_HALF, P=P, tile=True,
             origins=('gas',), zmax=20.0, n_mu=100000, key='c15')
+        if window:
+            add(name='c5_%s_plain_win' % gas_label(P), group='c5', mirror=(MIRROR_R, MIRROR_D), sensor=SIPM_HALF, P=P, tile=True,
+                origins=('window',), zmax=20.0, n_mu=100000, key='c15')
         if P in (1.0, 2.0, 3.0):
             for v in VARIANTS[1:]:
                 add(name='c5_%s_%s' % (gas_label(P), v), group='c5', mirror=(MIRROR_R, MIRROR_D), sensor=SIPM_HALF, P=P, tile=True,
@@ -113,8 +122,13 @@ def layout_of(run):
     tile_medium = aerogel_medium(inp['aerogel_index'], tile.n, inp['aerogel_lambda_ref']) if disp else None   # dispersion through n(lambda_ref)
     gas = air() if run['P'] == 0 else xenon(run['P'])
     model = inp['sensor_model'] if run['sensor'] == SIPM_HALF else 'square'   # the board replaces the 2" SiPM only
-    return Phase1Layout(Mirror(*run['mirror'], reflectivity=inp['mirror_r']), Sensor(run['sensor'], model=model), gas, tile,
-                        tile_medium=tile_medium, tile_scatter=Rayleigh() if run['rayleigh'] else None)
+    mirror = Mirror(*run['mirror'], reflectivity=inp['mirror_r'])
+    win = _G.get('window'); kw = {}
+    if win is not None:   # tile, PWINDOW_GAP of gas, window, PWINDOW_GAP of air, SiPM moved to the paraxial focus through the window
+        kw = dict(window=win, gap=2*PWINDOW_GAP+win.thickness,
+                  z_sensor_=mirror.f+win.thickness*(1-1/float(win.medium.n(PWINDOW_LAM))))
+    return Phase1Layout(mirror, Sensor(run['sensor'], model=model), gas, tile,
+                        tile_medium=tile_medium, tile_scatter=Rayleigh() if run['rayleigh'] else None, **kw)
 
 
 def sample_muons(rng, n, half, z0, zmax):
@@ -127,19 +141,21 @@ def sample_muons(rng, n, half, z0, zmax):
 def board_reflection_used(run):
     """Whether the board reflection of a run enters an output (the board table): configuration 1 and the configuration-5
     gas ring, whose photons come from the _ray runs; the other runs skip it (cost)."""
-    return run['group'] == 'c1' or (run['group'] == 'c5' and run['rayleigh'])
+    return _G.get('window') is None and (run['group'] == 'c1' or (run['group'] == 'c5' and run['rayleigh']))
 
 
 def chunk_of(run):
     """Muons traced together in work_mirror: CHUNK, fewer when they would carry more than CHUNK_PHOTONS photons."""
-    per_muon = sum({'gas': _G['ngas'], 'tile': _G['ntile']}[o] for o in run['origins'])
-    return min(CHUNK, max(1, CHUNK_PHOTONS//per_muon))
+    per_muon = sum({'gas': _G['ngas'], 'tile': _G['ntile'], 'window': _G.get('nwin', NPHOT_WINDOW)}[o] for o in run['origins'])
+    return min(CHUNK, max(1, _G.get('chunk_photons', CHUNK_PHOTONS)//per_muon))
 
 
 def work_mirror(run, rng, n, refl_rng=None):
     lay = layout_of(run); chunk = chunk_of(run)
-    u, p0, p = sample_muons(rng, n, run['top_half'], lay.z_sensor, run['zmax'])
-    bot = p0+((0.0-lay.z_sensor)/u[:, 2])[:, None]*u
+    z0 = lay.mirror.f   # the top counter stays at the focal plane when a window moves the SiPM (same muons)
+    u, p0, p = sample_muons(rng, n, run['top_half'], z0, run['zmax'])
+    bot = p0+((0.0-z0)/u[:, 2])[:, None]*u
+    pt = p0+((lay.z_sensor-z0)/u[:, 2])[:, None]*u   # traced from the SiPM plane: the whole window thickness (no shift without a window)
     out = dict(c=-u[:, 2], phi=np.arctan2(u[:, 1], u[:, 0]), x0=p0[:, 0], y0=p0[:, 1], p=p,
                top=(np.abs(p0[:, 0]) < TOP_HALF)&(np.abs(p0[:, 1]) < TOP_HALF),
                bot=(np.abs(bot[:, 0]) < BOT_HALF['mirror'])&(np.abs(bot[:, 1]) < BOT_HALF['mirror']))
@@ -151,7 +167,7 @@ def work_mirror(run, rng, n, refl_rng=None):
                + ((*cosmic.BOARD_KEYS, 'pads_pge') if board else ()) + rkeys}
         for i0 in range(0, n, chunk):
             sl = slice(i0, i0+chunk)
-            r = cosmic.trace_batch(lay, rng, p0[sl], u[sl], b[sl], {'gas': _G['ngas'], 'tile': _G['ntile']}, run['origins'],
+            r = cosmic.trace_batch(lay, rng, pt[sl], u[sl], b[sl], {'gas': _G['ngas'], 'tile': _G['ntile'], 'window': _G.get('nwin', NPHOT_WINDOW)}, run['origins'],
                                    response=response(_G['inputs']['response']), refl=refl, refl_rng=refl_rng)
             for k in acc:
                 acc[k].append(r[k])
@@ -257,22 +273,35 @@ def main():
     p = cli.parser(__doc__)
     p.add_argument('--nphot', type=int, default=None,
                    help='sampled tile photons per muon (gas: 0.4x); default %d, with --preset %s. Muons are traced in chunks of '
-                        'at most %d muons and %d photons, which bounds the memory of a worker' % (NPHOT, ', '.join(
-                            '%s %d' % kv for kv in cli.PRESET_NPHOT.items()), CHUNK, CHUNK_PHOTONS))
+                        'at most %d muons and --chunk-photons photons, which bounds the memory of a worker' % (NPHOT, ', '.join(
+                            '%s %d' % kv for kv in cli.PRESET_NPHOT.items()), CHUNK))
     p.add_argument('--nmu-scale', type=float, default=1.0, help='scale of the muon numbers per run (default 1)')
     p.add_argument('--nseed', type=int, default=5, help='independent seeds per run (default 5)')
     p.add_argument('--seed', type=int, default=20261010, help='master seed')
     p.add_argument('--nproc', type=int, default=20, help='worker processes (default 20)')
     p.add_argument('--groups', nargs='*', default=None, help='run groups (c1 c5 c23 s61 c4: configurations 1, 5, 2-3, the larger layouts, 4; default all)')
+    p.add_argument('--chunk-photons', type=int, default=CHUNK_PHOTONS,
+                   help='photons traced together at most (worker memory; the random streams depend on it); default %(default)d')
+    p.add_argument('--nphot-window', type=int, default=NPHOT_WINDOW, help='sampled photons per muon in the pressure window; default %(default)d')
+    p.add_argument('--only', default=None, help='regular expression: run only the runs whose name it matches (with --groups)')
+    p.add_argument('--pwindow-t', type=float, default=0.0,
+                   help='fused-silica pressure window of this thickness [mm] between tile and SiPM, PWINDOW_GAP to each, SiPM '
+                        'refocused; only with --groups within PWINDOW_GROUPS (configurations 1 and 5); default 0 (none)')
     p.add_argument('--spectrum', choices=muons.SPECTRUM_MODELS, default=muons.SPECTRUM_DEFAULT,
                    help='parametrisation the momenta are drawn from (default %(default)s)')
     cli.detector_inputs(p)
     args = p.parse_args(); out = cli.outdir(args)
     args.nphot = nphot_of(args)
-    allr = runs(args.nmu_scale)
-    sel = [i for i, r in enumerate(allr) if args.groups is None or r['group'] in args.groups]
+    if args.pwindow_t < 0 or (args.pwindow_t > 0 and not (args.groups and set(args.groups) <= set(PWINDOW_GROUPS))):
+        p.error('--pwindow-t must be >= 0, and > 0 only with --groups within %s' % ' '.join(PWINDOW_GROUPS))
+    allr = runs(args.nmu_scale, args.pwindow_t > 0)
+    sel = [i for i, r in enumerate(allr) if (args.groups is None or r['group'] in args.groups) and (args.only is None or re.search(args.only, r['name']))]
+    if not sel:
+        p.error('no run matches --groups / --only')
+    if args.pwindow_t > 0:
+        _G['window'] = Window(thickness=args.pwindow_t, gap=PWINDOW_GAP, half=PWINDOW_HALF, glass=fused_silica(), outer=air())
     _G.update(runs=allr, seed=args.seed, nseed=args.nseed, ngas=int(round(0.4*args.nphot)), ntile=args.nphot,
-              spec=muons.MuonSpectrum(args.spectrum), inputs=cli.inputs(args))
+              spec=muons.MuonSpectrum(args.spectrum), inputs=cli.inputs(args), chunk_photons=args.chunk_photons, nwin=args.nphot_window)
     tasks = sorted([(ri, si) for ri in sel for si in range(args.nseed)], key=lambda t: -allr[t[0]]['n_mu'])
     t0 = time.time(); res = {}
     # a worker that dies (e.g. out of memory) raises BrokenProcessPool here instead of hanging
