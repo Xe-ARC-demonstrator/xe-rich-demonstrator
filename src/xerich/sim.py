@@ -350,7 +350,7 @@ def track_segments(layout, p0, u):
         h = layout.tile.half
         tile = _box_interval(p0, u, (-h, -h, layout.z_tile_bottom), (h, h, layout.z_tile_top), s_end)
     if layout.window is not None:
-        h = layout.sensor.half if layout.window.half is None else layout.window.half
+        h = layout.sensor.plane_half if layout.window.half is None else layout.window.half
         window = _box_interval(p0, u, (-h, -h, layout.z_window_bottom), (h, h, layout.z_window_top), s_end)
         if layout.window.gap > 0:
             outer = _box_interval(p0, u, (-h, -h, layout.z_window_top), (h, h, layout.z_sensor), s_end)

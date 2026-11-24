@@ -77,3 +77,21 @@ def test_driver_window_layout_and_refusals(tmp_path, monkeypatch):
         monkeypatch.setattr(sys, 'argv', ['cosmic_rates.py', '--outdir', str(tmp_path)]+argv)
         with pytest.raises(SystemExit):
             cr.main()
+
+
+def test_board_window_segment_matches_slab():
+    """A window without its own size spans the sensor plane in the scene and in the track segments (board: the footprint)."""
+    lay = Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(25.4, model='board'), xenon(2.0), window=Window())
+    h = lay.scene().slabs[0].hi[0]; z = lay.z_sensor
+    assert h == lay.sensor.plane_half > lay.sensor.half
+    x = 0.5*(lay.sensor.half+h)      # inside the slab, outside the nominal 2" half side
+    seg = sim.track_segments(lay, np.array([x, 0.0, z]), np.array([0.0, 0.0, -1.0]))
+    assert [(b-a) for a, b in seg['window']] == pytest.approx([lay.window.thickness])
+
+
+def test_window_light_only_on_request():
+    """emit_batch (and trace_batch, same default) emits gas and tile light by default, window light only when asked for."""
+    lay = layout(); z = lay.z_sensor
+    args = (np.random.default_rng(1), np.array([[1.0, 2.0, z]]), np.array([[0.0, 0.0, -1.0]]), np.ones(1), 200)
+    assert cosmic.ORIGINS.index('window') not in set(cosmic.emit_batch(lay, *args)['origin'])
+    assert cosmic.ORIGINS.index('window') in set(cosmic.emit_batch(lay, *args, origins=cosmic.ORIGINS)['origin'])

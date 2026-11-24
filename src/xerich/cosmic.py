@@ -19,6 +19,7 @@ from .constants import ALPHA, HBARC_EV_CM, HC, PAD_KMAX
 from .sim import footprint_fraction, footprint_fraction_tracks, track_segments
 
 ORIGINS = ('gas', 'tile', 'window')
+DEFAULT_ORIGINS = ('gas', 'tile')   # emitted unless origins says otherwise: window light only on request
 N_ARC = 36                   # azimuth bins of the arc coverage
 MAX_SEGMENTS = 3             # track segments per origin handled by emit_batch
 BOARD_KEYS = ('det_qe_plane', 'det_qe_ring', 'pads', 'pads_all')   # extra trace_batch sums of the board sensor model
@@ -52,7 +53,7 @@ def gas_ring_fractions(x, y, sx, sy, thc, mirror, sensor, L, ns=8, npsi=24, slop
     return fm, fs
 
 
-def emit_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, response=qe_arc):
+def emit_batch(layout, rng, P0, U, beta, n_per, origins=DEFAULT_ORIGINS, band=None, response=qe_arc):
     """Cherenkov photons of muons (entry points P0, directions U (M,3), velocities beta (M,)) in layout.
 
     n_per photons per muon and origin (int or {origin: int}), uniform in photon energy over band (default the ARC SiPM
@@ -132,7 +133,7 @@ def board_reflections(scene, rng, p, d, lam, w, spec, diff, gens=REFL_GENS, max_
     return tuple(np.concatenate(x) for x in zip(*out))
 
 
-def trace_batch(layout, rng, P0, U, beta, n_per, origins=ORIGINS, band=None, max_reflections=2, response=qe_arc, keep_muon_pad=False,
+def trace_batch(layout, rng, P0, U, beta, n_per, origins=DEFAULT_ORIGINS, band=None, max_reflections=2, response=qe_arc, keep_muon_pad=False,
                 refl=(0.0, 0.0), refl_rng=None):
     """Trace the photons of emit_batch and sum them per muon and origin (arrays of shape (M, len(ORIGINS))).
 
