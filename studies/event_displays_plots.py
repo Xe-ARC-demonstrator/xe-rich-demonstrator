@@ -38,7 +38,7 @@ CLS_COL = {L.GAS: C_GAS, L.TILE: C_AERO, L.OTHER: C_OTH}
 F_TITLE, F_ANG, F_LEG, F_SCALE, F_ROW = 10.0, 9.6, 9.6, 9.6, 11.0   # font sizes [pt]
 XW = 46.0                      # half width of the side views [mm]
 LIM = 31.0                     # half width of the board displays [mm]
-W_FIG = 5.512                # figure width [in]
+W_FIG = 5.512                  # figure width [in]
 plt.rcParams.update({'font.family': 'DejaVu Sans'})
 
 

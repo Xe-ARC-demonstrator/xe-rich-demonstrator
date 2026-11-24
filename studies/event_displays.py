@@ -142,7 +142,7 @@ def check_emit():
     """emit_generic with track_segments reproduces cosmic.emit_batch bit for bit (configuration 5)."""
     from xerich.sim import track_segments
     lay = make('c5'); P0, U, _ = muon('c5', 3.0)
-    a = cosmic.emit_batch(lay, np.random.default_rng(1), P0[None], U[None], np.full(1, BETA), 500, response=RESP)
+    a = cosmic.emit_batch(lay, np.random.default_rng(1), P0[None], U[None], np.full(1, BETA), 500, ('gas', 'tile'), response=RESP)
     b = emit_generic(lambda p, u: track_segments(lay, p, u), {'gas': lay.gas.n, 'tile': lay.tile_index.n}, np.random.default_rng(1),
                      P0[None], U[None], np.full(1, BETA), 500)
     return all(np.array_equal(a[k], b[k]) for k in a)

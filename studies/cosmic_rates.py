@@ -283,16 +283,16 @@ def main():
     p.add_argument('--chunk-photons', type=int, default=CHUNK_PHOTONS,
                    help='photons traced together at most (worker memory; the random streams depend on it); default %(default)d')
     p.add_argument('--nphot-window', type=int, default=NPHOT_WINDOW, help='sampled photons per muon in the pressure window; default %(default)d')
-    p.add_argument('--only', default=None, help='regular expression: run only the runs whose name it matches (with --groups)')
+    p.add_argument('--only', default=None, help='regular expression searched in the run names: run only the matching runs (of --groups, if given)')
     p.add_argument('--pwindow-t', type=float, default=0.0,
-                   help='fused-silica pressure window of this thickness [mm] between tile and SiPM, PWINDOW_GAP to each, SiPM '
-                        'refocused; only with --groups within PWINDOW_GROUPS (configurations 1 and 5); default 0 (none)')
+                   help='fused-silica pressure window of this thickness [mm] between tile and SiPM, %g mm to each, SiPM '
+                        'refocused; only with --groups within %s; default 0 (none)' % (PWINDOW_GAP, ' '.join(PWINDOW_GROUPS)))
     p.add_argument('--spectrum', choices=muons.SPECTRUM_MODELS, default=muons.SPECTRUM_DEFAULT,
                    help='parametrisation the momenta are drawn from (default %(default)s)')
     cli.detector_inputs(p)
     args = p.parse_args(); out = cli.outdir(args)
     args.nphot = nphot_of(args)
-    if args.pwindow_t < 0 or (args.pwindow_t > 0 and not (args.groups and set(args.groups) <= set(PWINDOW_GROUPS))):
+    if not args.pwindow_t >= 0 or (args.pwindow_t > 0 and not (args.groups and set(args.groups) <= set(PWINDOW_GROUPS))):
         p.error('--pwindow-t must be >= 0, and > 0 only with --groups within %s' % ' '.join(PWINDOW_GROUPS))
     allr = runs(args.nmu_scale, args.pwindow_t > 0)
     sel = [i for i, r in enumerate(allr) if (args.groups is None or r['group'] in args.groups) and (args.only is None or re.search(args.only, r['name']))]

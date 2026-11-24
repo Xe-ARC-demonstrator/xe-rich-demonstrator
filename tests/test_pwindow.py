@@ -72,7 +72,7 @@ def test_driver_window_layout_and_refusals(tmp_path, monkeypatch):
     lay = cr.layout_of(run)
     assert lay.z_sensor == pytest.approx(lay.mirror.f+T*(1-1/n_fused_silica(cr.PWINDOW_LAM)))
     assert lay.z_tile_top == pytest.approx(lay.z_sensor-2*GAP-T)
-    for argv in (['--pwindow-t', '5'], ['--pwindow-t', '5', '--groups', 'c5', 'c4'], ['--pwindow-t', '-1', '--groups', 'c5'],
+    for argv in (['--pwindow-t', '5'], ['--pwindow-t', '5', '--groups', 'c5', 'c4'], ['--pwindow-t', '-1', '--groups', 'c5'], ['--pwindow-t', 'nan', '--groups', 'c5'],
                  ['--groups', 'c5', '--only', 'no-such-run']):
         monkeypatch.setattr(sys, 'argv', ['cosmic_rates.py', '--outdir', str(tmp_path)]+argv)
         with pytest.raises(SystemExit):
@@ -89,9 +89,15 @@ def test_board_window_segment_matches_slab():
     assert [(b-a) for a, b in seg['window']] == pytest.approx([lay.window.thickness])
 
 
-def test_window_light_only_on_request():
-    """emit_batch (and trace_batch, same default) emits gas and tile light by default, window light only when asked for."""
-    lay = layout(); z = lay.z_sensor
-    args = (np.random.default_rng(1), np.array([[1.0, 2.0, z]]), np.array([[0.0, 0.0, -1.0]]), np.ones(1), 200)
-    assert cosmic.ORIGINS.index('window') not in set(cosmic.emit_batch(lay, *args)['origin'])
-    assert cosmic.ORIGINS.index('window') in set(cosmic.emit_batch(lay, *args, origins=cosmic.ORIGINS)['origin'])
+def test_default_origins_follow_the_layout():
+    """emit_batch (and trace_batch, same default) emits from every medium the layout contains: window light with a
+    window, none without; origins restricts it."""
+    w = cosmic.ORIGINS.index('window')
+    for tile in (True, False):
+        lay = layout(tile); z = lay.z_sensor
+        args = (np.random.default_rng(1), np.array([[1.0, 2.0, z]]), np.array([[0.0, 0.0, -1.0]]), np.ones(1), 200)
+        assert w in set(cosmic.emit_batch(lay, *args)['origin'])
+        assert w not in set(cosmic.emit_batch(lay, *args, origins=('gas', 'tile'))['origin'])
+    lay = Phase1Layout(Mirror(MIRROR_R, MIRROR_D), Sensor(25.4), xenon(2.0)); z = lay.z_sensor
+    ph = cosmic.emit_batch(lay, np.random.default_rng(1), np.array([[1.0, 2.0, z]]), np.array([[0.0, 0.0, -1.0]]), np.ones(1), 200)
+    assert set(ph['origin']) == {cosmic.ORIGINS.index('gas')}

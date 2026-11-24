@@ -274,7 +274,7 @@ Aerogel-angle measurement (configurations 2–4):
 - Measured mirror reflectivity, PDE at the operating point and aerogel transmission, to replace the assumed inputs (§4); crosstalk and dark counts are not modelled.
 - Cosmic rates: altitude and geomagnetic cutoff (§5), the trigger-counter geometry, the momentum handle and a data-level estimator of the aerogel angle for configurations 2–4, the tile side faces (§7).
 - Comparison with the ARC full simulation (`ARC_Simulation_Reconstruction`), with Xe properties tuned.
-- Pressure window (§4): thickness, anti-reflection coating, the muon's light in the window, the window in configurations 1–4 (configuration 4 has no window model yet), the board reflection with the window.
+- Pressure window (§4): thickness, anti-reflection coating, the muon's light in the window, the window in configurations 2–4 and the larger mirror layouts (no window model yet), the board reflection with the window.
 
 ## Sources
 - Xe dispersion:
